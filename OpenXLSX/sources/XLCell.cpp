@@ -210,6 +210,14 @@ bool XLCell::hasFormula() const
 XLFormulaProxy& XLCell::formula() { return m_formulaProxy; }
 
 /**
+ * @details 返回单元格计算结果（来自 <v> 节点），与 value() 一致。
+ */
+XLCellValue XLCell::calculatedValue() const
+{
+    return static_cast<XLCellValue>(value());
+}
+
+/**
 * @details get the value of the s attribute of the cell node
 */
 size_t XLCell::cellFormat() const { return m_cellNode->attribute("s").as_uint(0); }

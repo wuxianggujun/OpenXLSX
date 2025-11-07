@@ -208,6 +208,11 @@ namespace OpenXLSX
         const XLFormulaProxy& formula() const;
 
         /**
+         * @brief 读取计算结果（<v>）的便捷方法；等同于读取当前单元格的值
+         */
+        XLCellValue calculatedValue() const;
+
+        /**
          * @brief
          */
         std::string getString() const { return value().getString(); }

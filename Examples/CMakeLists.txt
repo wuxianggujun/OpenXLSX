@@ -5,6 +5,11 @@ cmake_minimum_required(VERSION 3.15 FATAL_ERROR)
 project(OpenXLSX.Examples)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+# Ensure MSVC treats sources as UTF-8 to avoid codepage parsing issues
+if (MSVC)
+    add_compile_options(/utf-8)
+endif()
+
 #=======================================================================================================================
 # Include boost::nowide library (required for Demo4)
 #=======================================================================================================================
@@ -87,3 +92,19 @@ target_link_libraries(Demo9 PRIVATE OpenXLSX::OpenXLSX)
 #=======================================================================================================================
 add_executable(Demo10 Demo10.cpp)
 target_link_libraries(Demo10 PRIVATE OpenXLSX::OpenXLSX)
+
+#=======================================================================================================================
+# Define Demo11 target
+#=======================================================================================================================
+add_executable(Demo11 Demo11.cpp)
+target_link_libraries(Demo11 PRIVATE OpenXLSX::OpenXLSX)
+
+#=======================================================================================================================
+# Define Demo12 target (hardcoded path shared formula printer)
+#=======================================================================================================================
+add_executable(Demo12 Demo12.cpp)
+target_link_libraries(Demo12 PRIVATE OpenXLSX::OpenXLSX)
+if (WIN32)
+    # nowide is header-only for convert.hpp, linking not strictly required, but keep consistent
+    target_link_libraries(Demo12 PRIVATE nowide::nowide)
+endif()
