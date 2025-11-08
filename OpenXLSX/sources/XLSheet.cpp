@@ -52,6 +52,7 @@ YM      M9  MM    MM MM       MM    MM   d'  `MM.    MM            MM   d'  `MM.
 
 // ===== OpenXLSX Includes ===== //
 #include "XLCellRange.hpp"
+#include "XLException.hpp"
 #include "XLDocument.hpp"
 #include "XLMergeCells.hpp"
 #include "XLSheet.hpp"
@@ -110,6 +111,88 @@ namespace OpenXLSX
             .first_child_of_type(pugi::node_element)
             .attribute("tabSelected")
             .as_bool();    // BUGFIX 2024-05-01: .value() "0" was evaluating to true
+    }
+
+    // =============================
+    // Shared Formula Write Support
+    // =============================
+
+    /**
+     * @brief 获取下一个可用的共享公式索引（扫描 <sheetData> 内所有 <f t="shared" si="..">）。
+     */
+    uint32_t XLWorksheet::nextSharedFormulaIndex() const
+    {
+        if (m_nextSharedIndex != 0) return m_nextSharedIndex; // 已初始化
+
+        uint32_t next = 0;
+        XMLNode sheetData = xmlDocument().document_element().child("sheetData");
+        if (!sheetData.empty()) {
+            for (XMLNode row = sheetData.child("row"); !row.empty(); row = row.next_sibling("row")) {
+                for (XMLNode c = row.child("c"); !c.empty(); c = c.next_sibling("c")) {
+                    XMLNode f = c.child("f");
+                    if (f.empty()) continue;
+                    auto tAttr = f.attribute("t");
+                    if (!tAttr.empty() && std::string(tAttr.value()) == "shared") {
+                        uint32_t si = f.attribute("si").as_uint();
+                        if (si >= next) next = si + 1;
+                    }
+                }
+            }
+        }
+        m_nextSharedIndex = next;
+        return m_nextSharedIndex;
+    }
+
+    /**
+     * @brief 以字符串范围设置共享公式。
+     */
+    uint32_t XLWorksheet::setSharedFormula(const std::string& rangeReference,
+                                           const std::string& masterFormula,
+                                           bool resetValues)
+    {
+        return setSharedFormula(range(rangeReference), masterFormula, resetValues);
+    }
+
+    /**
+     * @brief 以 XLCellRange 设置共享公式。
+     */
+    uint32_t XLWorksheet::setSharedFormula(const XLCellRange& rng,
+                                           const std::string& masterFormula,
+                                           bool resetValues)
+    {
+        const auto topLeft = rng.topLeft();
+        const auto bottomRight = rng.bottomRight();
+        const std::string rangeRef = rng.address();
+
+        // 验证范围至少包含 2 个单元格
+        uint32_t numRows = bottomRight.row() - topLeft.row() + 1;
+        uint16_t numCols = static_cast<uint16_t>(bottomRight.column() - topLeft.column() + 1);
+        if (numRows == 0 || numCols == 0 || (static_cast<uint64_t>(numRows) * numCols < 2))
+            throw XLException("Shared formula requires at least 2 cells.");
+
+        // 验证主公式非空
+        if (masterFormula.empty())
+            throw XLException("Master formula cannot be empty.");
+
+        // 分配共享索引
+        uint32_t si = nextSharedFormulaIndex();
+
+        // 写入主单元格
+        auto masterCell = cell(topLeft);
+        masterCell.formula().setSharedMaster(si, rangeRef, masterFormula, resetValues);
+
+        // 写入其余单元格为引用
+        for (uint32_t r = topLeft.row(); r <= bottomRight.row(); ++r) {
+            for (uint16_t c = topLeft.column(); c <= bottomRight.column(); ++c) {
+                if (r == topLeft.row() && c == topLeft.column()) continue;
+                auto refCell = cell(r, c);
+                refCell.formula().setSharedRef(si, resetValues);
+            }
+        }
+
+        // 递增共享索引以备下次使用
+        m_nextSharedIndex = si + 1;
+        return si;
     }
 
 

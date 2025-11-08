@@ -388,3 +388,62 @@ XLFormula XLFormulaProxy::getRawFormula() const
 
     return XLFormula(formulaNode.text().get());
 }
+
+/**
+ * @brief 写入主共享公式到当前单元格。
+ */
+bool XLFormulaProxy::setSharedMaster(uint32_t sharedIndex,
+                                     const std::string& rangeRef,
+                                     const std::string& masterFormula,
+                                     bool resetValue)
+{
+    assert(m_cellNode != nullptr);
+    assert(not m_cellNode->empty());
+
+    // 确保 <v> 节点存在
+    if (m_cellNode->child("v").empty()) m_cellNode->append_child("v");
+
+    // 重新创建 <f> 节点以确保包含文本
+    if (!m_cellNode->child("f").empty()) m_cellNode->remove_child("f");
+    auto f = m_cellNode->append_child("f");
+    // 按可读顺序写入属性：t, ref, si
+    f.append_attribute("t").set_value("shared");
+    if (!rangeRef.empty()) f.append_attribute("ref").set_value(rangeRef.c_str());
+    f.append_attribute("si").set_value(sharedIndex);
+    f.text().set(masterFormula.c_str());
+
+    if (resetValue) m_cellNode->child("v").text().set(0);
+
+    // 保持 <f> 排在 <v> 前（与 setFormulaString 行为一致）
+    m_cellNode->prepend_move(f);
+
+    // 清理单元格类型与可能的 inlineStr
+    m_cellNode->remove_attribute("t");
+    m_cellNode->remove_child("is");
+    return true;
+}
+
+/**
+ * @brief 写入共享公式引用（从属）到当前单元格。
+ */
+bool XLFormulaProxy::setSharedRef(uint32_t sharedIndex, bool resetValue)
+{
+    assert(m_cellNode != nullptr);
+    assert(not m_cellNode->empty());
+
+    // 确保 <v> 节点存在，并重建 <f> 节点
+    if (m_cellNode->child("v").empty()) m_cellNode->append_child("v");
+    if (!m_cellNode->child("f").empty()) m_cellNode->remove_child("f");
+    XMLNode fnode = m_cellNode->append_child("f");
+    // 按可读顺序写入属性：t, si
+    fnode.append_attribute("t").set_value("shared");
+    fnode.append_attribute("si").set_value(sharedIndex);
+    fnode.text().set("");
+
+    if (resetValue) m_cellNode->child("v").text().set(0);
+
+    m_cellNode->prepend_move(fnode);
+    m_cellNode->remove_attribute("t");
+    m_cellNode->remove_child("is");
+    return true;
+}

@@ -295,6 +295,29 @@ namespace OpenXLSX
         XLFormula getRawFormula() const;
 
         /**
+         * @brief 设置主共享公式（仅供高级用法）。
+         *        在当前单元格创建 <f t="shared" si=".." ref="..">masterFormula</f>
+         * @param sharedIndex 共享索引（工作表内唯一）
+         * @param rangeRef    共享范围（如 "A1:A10"）
+         * @param masterFormula 主公式文本（以当前单元格为基准）
+         * @param resetValue 若为 true，则将 <v> 节点值设为 0
+         * @return true 表示已写入
+         */
+        bool setSharedMaster(uint32_t sharedIndex,
+                             const std::string& rangeRef,
+                             const std::string& masterFormula,
+                             bool resetValue = XLResetValue);
+
+        /**
+         * @brief 设置共享公式引用单元格（仅供高级用法）。
+         *        在当前单元格创建 <f t="shared" si=".."/>
+         * @param sharedIndex 共享索引
+         * @param resetValue 若为 true，则将 <v> 节点值设为 0
+         * @return true 表示已写入
+         */
+        bool setSharedRef(uint32_t sharedIndex, bool resetValue = XLResetValue);
+
+        /**
          * @brief Conversion operator, for converting the object to a std::string.
          * @return The formula as a std::string.
          */
