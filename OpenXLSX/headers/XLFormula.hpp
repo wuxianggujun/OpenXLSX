@@ -295,13 +295,13 @@ namespace OpenXLSX
         XLFormula getRawFormula() const;
 
         /**
-         * @brief 设置主共享公式（仅供高级用法）。
-         *        在当前单元格创建 <f t="shared" si=".." ref="..">masterFormula</f>
-         * @param sharedIndex 共享索引（工作表内唯一）
-         * @param rangeRef    共享范围（如 "A1:A10"）
-         * @param masterFormula 主公式文本（以当前单元格为基准）
-         * @param resetValue 若为 true，则将 <v> 节点值设为 0
-         * @return true 表示已写入
+         * @brief Set the master shared formula (advanced usage).
+         *        Creates <f t="shared" si=".." ref="..">masterFormula</f> in the current cell.
+         * @param sharedIndex Shared index (unique per worksheet)
+         * @param rangeRef    Shared range (e.g. "A1:A10")
+         * @param masterFormula Master formula text (relative to current cell)
+         * @param resetValue If true, set <v> node to 0
+         * @return true on success
          */
         bool setSharedMaster(uint32_t sharedIndex,
                              const std::string& rangeRef,
@@ -309,11 +309,11 @@ namespace OpenXLSX
                              bool resetValue = XLResetValue);
 
         /**
-         * @brief 设置共享公式引用单元格（仅供高级用法）。
-         *        在当前单元格创建 <f t="shared" si=".."/>
-         * @param sharedIndex 共享索引
-         * @param resetValue 若为 true，则将 <v> 节点值设为 0
-         * @return true 表示已写入
+         * @brief Set the shared formula reference (advanced usage).
+         *        Creates <f t="shared" si=".."/> in the current cell.
+         * @param sharedIndex Shared index
+         * @param resetValue If true, set <v> node to 0
+         * @return true on success
          */
         bool setSharedRef(uint32_t sharedIndex, bool resetValue = XLResetValue);
 

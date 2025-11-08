@@ -9,6 +9,9 @@
 !/NOTICE
 !/README.md
 
+# Keep developer notes out of VCS
+/docs/
+
 # include root directory files
 !/CMakeLists.txt
 !/Makefile.GNU

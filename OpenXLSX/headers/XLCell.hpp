@@ -208,7 +208,8 @@ namespace OpenXLSX
         const XLFormulaProxy& formula() const;
 
         /**
-         * @brief 读取计算结果（<v>）的便捷方法；等同于读取当前单元格的值
+         * @brief Convenience to read the cached calculation result (<v>);
+         *        functionally equivalent to reading the current cell value.
          */
         XLCellValue calculatedValue() const;
 

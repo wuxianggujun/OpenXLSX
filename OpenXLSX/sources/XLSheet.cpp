@@ -118,11 +118,11 @@ namespace OpenXLSX
     // =============================
 
     /**
-     * @brief 获取下一个可用的共享公式索引（扫描 <sheetData> 内所有 <f t="shared" si="..">）。
+     * @brief Get next available shared formula index by scanning <sheetData> for <f t="shared" si="..">.
      */
     uint32_t XLWorksheet::nextSharedFormulaIndex() const
     {
-        if (m_nextSharedIndex != 0) return m_nextSharedIndex; // 已初始化
+        if (m_nextSharedIndex != 0) return m_nextSharedIndex; // already initialized
 
         uint32_t next = 0;
         XMLNode sheetData = xmlDocument().document_element().child("sheetData");
@@ -144,7 +144,7 @@ namespace OpenXLSX
     }
 
     /**
-     * @brief 以字符串范围设置共享公式。
+     * @brief Set a shared formula using a string range reference.
      */
     uint32_t XLWorksheet::setSharedFormula(const std::string& rangeReference,
                                            const std::string& masterFormula,
@@ -154,7 +154,7 @@ namespace OpenXLSX
     }
 
     /**
-     * @brief 以 XLCellRange 设置共享公式。
+     * @brief Set a shared formula using an XLCellRange.
      */
     uint32_t XLWorksheet::setSharedFormula(const XLCellRange& rng,
                                            const std::string& masterFormula,
@@ -164,24 +164,24 @@ namespace OpenXLSX
         const auto bottomRight = rng.bottomRight();
         const std::string rangeRef = rng.address();
 
-        // 验证范围至少包含 2 个单元格
+        // Validate: at least 2 cells in range
         uint32_t numRows = bottomRight.row() - topLeft.row() + 1;
         uint16_t numCols = static_cast<uint16_t>(bottomRight.column() - topLeft.column() + 1);
         if (numRows == 0 || numCols == 0 || (static_cast<uint64_t>(numRows) * numCols < 2))
             throw XLException("Shared formula requires at least 2 cells.");
 
-        // 验证主公式非空
+        // Validate: master formula must not be empty
         if (masterFormula.empty())
             throw XLException("Master formula cannot be empty.");
 
-        // 分配共享索引
+        // Allocate shared formula index
         uint32_t si = nextSharedFormulaIndex();
 
-        // 写入主单元格
+        // Write master cell
         auto masterCell = cell(topLeft);
         masterCell.formula().setSharedMaster(si, rangeRef, masterFormula, resetValues);
 
-        // 写入其余单元格为引用
+        // Write the remaining cells as shared references
         for (uint32_t r = topLeft.row(); r <= bottomRight.row(); ++r) {
             for (uint16_t c = topLeft.column(); c <= bottomRight.column(); ++c) {
                 if (r == topLeft.row() && c == topLeft.column()) continue;
@@ -190,7 +190,7 @@ namespace OpenXLSX
             }
         }
 
-        // 递增共享索引以备下次使用
+        // Increase shared index for next usage
         m_nextSharedIndex = si + 1;
         return si;
     }

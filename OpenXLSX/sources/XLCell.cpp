@@ -210,10 +210,10 @@ bool XLCell::hasFormula() const
 XLFormulaProxy& XLCell::formula() { return m_formulaProxy; }
 
 /**
- * @brief 读取单元格的计算结果值
- * @details 对于包含公式的单元格，返回 <v> 节点中存储的计算结果；
- *          对于普通单元格，返回单元格值（与 value() 相同）。
- *          注意：OpenXLSX 不执行公式计算，只读取 Excel 已保存的结果值。
+ * @brief Read calculated value of the cell.
+ * @details For formula cells, returns the value stored in <v> (cached result);
+ *          for normal cells, returns the cell value (same as value()).
+ *          Note: OpenXLSX does not perform formula evaluation; it only reads precomputed results.
  */
 XLCellValue XLCell::calculatedValue() const
 {

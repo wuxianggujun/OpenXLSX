@@ -311,7 +311,8 @@ void XLFormulaProxy::setFormulaString(const char* formulaString, bool resetValue
 
 /**
  * @details Creates and returns an XLFormula object, based on the formula string in the underlying
- * XML document. 若遇到共享公式，将尝试展开为当前单元格对应的实际公式。
+ * XML document. If a shared formula is encountered, it will be expanded to the concrete
+ * formula for the current cell.
  */
 XLFormula XLFormulaProxy::getFormula() const
 {
@@ -362,7 +363,8 @@ XLFormula XLFormulaProxy::getFormula() const
 }
 
 /**
- * @brief 获取原始公式，不做共享展开（若非主单元格则只返回元信息）
+ * @brief Get the raw formula without expanding shared references.
+ *        If the cell is a shared formula non-master, only metadata is returned.
  */
 XLFormula XLFormulaProxy::getRawFormula() const
 {
@@ -390,7 +392,7 @@ XLFormula XLFormulaProxy::getRawFormula() const
 }
 
 /**
- * @brief 写入主共享公式到当前单元格。
+ * @brief Write the master shared formula into the current cell.
  */
 bool XLFormulaProxy::setSharedMaster(uint32_t sharedIndex,
                                      const std::string& rangeRef,
@@ -400,13 +402,13 @@ bool XLFormulaProxy::setSharedMaster(uint32_t sharedIndex,
     assert(m_cellNode != nullptr);
     assert(not m_cellNode->empty());
 
-    // 确保 <v> 节点存在
+    // Ensure a <v> node exists
     if (m_cellNode->child("v").empty()) m_cellNode->append_child("v");
 
-    // 重新创建 <f> 节点以确保包含文本
+    // Recreate <f> node to ensure it contains text
     if (!m_cellNode->child("f").empty()) m_cellNode->remove_child("f");
     auto f = m_cellNode->append_child("f");
-    // 按可读顺序写入属性：t, ref, si
+    // Write attributes in readable order: t, ref, si
     f.append_attribute("t").set_value("shared");
     if (!rangeRef.empty()) f.append_attribute("ref").set_value(rangeRef.c_str());
     f.append_attribute("si").set_value(sharedIndex);
@@ -414,28 +416,28 @@ bool XLFormulaProxy::setSharedMaster(uint32_t sharedIndex,
 
     if (resetValue) m_cellNode->child("v").text().set(0);
 
-    // 保持 <f> 排在 <v> 前（与 setFormulaString 行为一致）
+    // Keep <f> before <v> (consistent with setFormulaString behavior)
     m_cellNode->prepend_move(f);
 
-    // 清理单元格类型与可能的 inlineStr
+    // Clean cell type and possible inlineStr
     m_cellNode->remove_attribute("t");
     m_cellNode->remove_child("is");
     return true;
 }
 
 /**
- * @brief 写入共享公式引用（从属）到当前单元格。
+ * @brief Write a shared formula reference (non-master) to the current cell.
  */
 bool XLFormulaProxy::setSharedRef(uint32_t sharedIndex, bool resetValue)
 {
     assert(m_cellNode != nullptr);
     assert(not m_cellNode->empty());
 
-    // 确保 <v> 节点存在，并重建 <f> 节点
+    // Ensure <v> exists and rebuild <f> node
     if (m_cellNode->child("v").empty()) m_cellNode->append_child("v");
     if (!m_cellNode->child("f").empty()) m_cellNode->remove_child("f");
     XMLNode fnode = m_cellNode->append_child("f");
-    // 按可读顺序写入属性：t, si
+    // Write attributes in readable order: t, si
     fnode.append_attribute("t").set_value("shared");
     fnode.append_attribute("si").set_value(sharedIndex);
     fnode.text().set("");

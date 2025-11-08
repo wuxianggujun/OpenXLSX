@@ -987,25 +987,25 @@ namespace OpenXLSX
         XLCellRange range(std::string const& rangeReference) const;
 
         /**
-         * @brief 为指定范围设置共享公式（以范围左上角为主公式单元格）。
-         * @param rangeReference 范围，如 "A2:A100"
-         * @param masterFormula  主公式（相对范围左上角）
-         * @param resetValues    是否重置 <v> 为 0（默认 true）
-         * @return 创建的共享索引 si
+         * @brief Set a shared formula for a string range (top-left is the master cell).
+         * @param rangeReference Range string like "A2:A100"
+         * @param masterFormula  Master formula (relative to the range top-left)
+         * @param resetValues    Whether to reset <v> values to 0 (default true)
+         * @return Created shared index (si)
          */
         uint32_t setSharedFormula(const std::string& rangeReference,
                                   const std::string& masterFormula,
                                   bool resetValues = true);
 
         /**
-         * @brief 为指定范围设置共享公式（以范围左上角为主公式单元格）。
+         * @brief Set a shared formula for a cell range (top-left is the master cell).
          */
         uint32_t setSharedFormula(const XLCellRange& range,
                                   const std::string& masterFormula,
                                   bool resetValues = true);
 
         /**
-         * @brief 获取下一个可用共享公式索引（扫描 sheetData 取 max(si)+1）
+         * @brief Get next available shared formula index (scan sheetData for max(si)+1).
          */
         uint32_t nextSharedFormulaIndex() const;
 
@@ -1339,7 +1339,7 @@ namespace OpenXLSX
         XLComments      m_comments{};         /**< class handling the worksheet comments */
         XLTables        m_tables{};           /**< class handling the worksheet table settings */
         const std::vector< std::string_view >& m_nodeOrder = XLWorksheetNodeOrder;  // worksheet XML root node required child sequence
-        mutable uint32_t m_nextSharedIndex { 0 }; /**< 下一个可用共享索引（懒加载） */
+        mutable uint32_t m_nextSharedIndex { 0 }; /**< Next available shared index (lazy-initialized) */
     };
 
     /**

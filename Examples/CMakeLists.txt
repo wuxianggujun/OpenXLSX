@@ -99,12 +99,4 @@ target_link_libraries(Demo10 PRIVATE OpenXLSX::OpenXLSX)
 add_executable(Demo11 Demo11.cpp)
 target_link_libraries(Demo11 PRIVATE OpenXLSX::OpenXLSX)
 
-#=======================================================================================================================
-# Define Demo12 target (hardcoded path shared formula printer)
-#=======================================================================================================================
-add_executable(Demo12 Demo12.cpp)
-target_link_libraries(Demo12 PRIVATE OpenXLSX::OpenXLSX)
-if (WIN32)
-    # nowide is header-only for convert.hpp, linking not strictly required, but keep consistent
-    target_link_libraries(Demo12 PRIVATE nowide::nowide)
-endif()
+## Demo12 removed per request (local-file reader not needed)
