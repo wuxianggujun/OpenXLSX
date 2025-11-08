@@ -4,11 +4,17 @@
 
 // ===== External Includes ===== //
 #include <cassert>
+#include <regex>
+#include <cctype>
+#include <string>
+#include <vector>
 #include <pugixml.hpp>
 
 // ===== OpenXLSX Includes ===== //
 #include "XLFormula.hpp"
 #include "XLException.hpp"
+#include "XLCellReference.hpp"
+#include "XLCell.hpp"
 
 using namespace OpenXLSX;
 
@@ -130,6 +136,140 @@ XLFormulaProxy& XLFormulaProxy::clear()
     return *this;
 }
 
+// -------------------- Helpers for Shared Formula expansion --------------------
+namespace {
+
+    // find quoted string ranges to avoid touching refs inside strings
+    std::vector<std::pair<size_t,size_t>> findQuotedRanges(const std::string& s)
+    {
+        std::vector<std::pair<size_t,size_t>> ranges;
+        bool in = false;
+        size_t start = 0;
+        for (size_t i = 0; i < s.size(); ++i) {
+            if (s[i] == '"') {
+                if (!in) { in = true; start = i; }
+                else {
+                    // check escaped double quote
+                    if (i + 1 < s.size() && s[i+1] == '"') { ++i; continue; }
+                    ranges.emplace_back(start, i + 1);
+                    in = false;
+                }
+            }
+        }
+        return ranges;
+    }
+
+    bool inRanges(const std::vector<std::pair<size_t,size_t>>& ranges, size_t pos)
+    {
+        for (auto const& r : ranges) {
+            if (pos >= r.first && pos < r.second) return true;
+        }
+        return false;
+    }
+
+    // convert column letters to number (A=1)
+    uint16_t columnLettersToNumber(const std::string& col)
+    {
+        uint32_t colNo = 0;
+        for (char c : col) {
+            if (c >= 'A' && c <= 'Z') colNo = colNo * 26 + (c - 'A' + 1);
+            else break;
+        }
+        return static_cast<uint16_t>(colNo);
+    }
+
+    // convert number to column letters (1=A)
+    std::string numberToColumnLetters(uint16_t column)
+    {
+        // reuse XLCellReference to avoid re-implementing; strip row afterwards
+        OpenXLSX::XLCellReference tmp(1, column);
+        std::string addr = tmp.address(); // e.g. A1
+        // strip trailing digits
+        size_t i = addr.size();
+        while (i > 0 && std::isdigit(static_cast<unsigned char>(addr[i-1]))) --i;
+        return addr.substr(0, i);
+    }
+
+    std::string expandSharedFormulaString(const std::string& masterFormula,
+                                          const OpenXLSX::XLCellReference& masterCell,
+                                          const OpenXLSX::XLCellReference& targetCell)
+    {
+        if (masterFormula.empty()) return masterFormula;
+        int rowOffset = static_cast<int>(targetCell.row()) - static_cast<int>(masterCell.row());
+        int colOffset = static_cast<int>(targetCell.column()) - static_cast<int>(masterCell.column());
+
+        // pattern: optional sheet ('..' or bare)! then optional $ col letters, optional $ row digits
+        std::regex refRe(R"(((?:'[^']+'|[A-Za-z_][\w\.]*)!)?(\$?)([A-Z]{1,3})(\$?)([0-9]{1,7}))");
+        auto quoted = findQuotedRanges(masterFormula);
+
+        std::string result;
+        result.reserve(masterFormula.size());
+        std::sregex_iterator it(masterFormula.begin(), masterFormula.end(), refRe);
+        std::sregex_iterator end;
+        size_t last = 0;
+        for (; it != end; ++it) {
+            size_t pos = static_cast<size_t>((*it).position());
+            size_t len = static_cast<size_t>((*it).length());
+            // skip if inside quoted string
+            if (inRanges(quoted, pos)) continue;
+            // append text before match
+            if (pos > last) result.append(masterFormula, last, pos - last);
+
+            std::smatch m = *it;
+            std::string sheetPart = m[1].str();
+            bool colAbs = !m[2].str().empty();
+            std::string colLetters = m[3].str();
+            bool rowAbs = !m[4].str().empty();
+            uint32_t row = static_cast<uint32_t>(std::stoul(m[5].str()));
+
+            uint16_t col = columnLettersToNumber(colLetters);
+            uint16_t newCol = static_cast<uint16_t>(colAbs ? col : static_cast<int>(col) + colOffset);
+            uint32_t newRow = static_cast<uint32_t>(rowAbs ? row : static_cast<int>(row) + rowOffset);
+
+            if (newCol < 1) newCol = 1; // basic guard
+            if (newRow < 1) newRow = 1;
+
+            std::string newColLetters = numberToColumnLetters(newCol);
+            if (colAbs) newColLetters = "$" + newColLetters;
+            std::string newRowStr = std::to_string(newRow);
+            if (rowAbs) newRowStr = "$" + newRowStr;
+
+            result += sheetPart + newColLetters + newRowStr;
+            last = pos + len;
+        }
+        // append remaining tail
+        if (last < masterFormula.size()) result.append(masterFormula, last, std::string::npos);
+        if (result.empty()) return masterFormula; // in case every match fell into quoted ranges
+        return result;
+    }
+
+    bool findMasterSharedFormulaForIndex(const pugi::xml_node& sheetData,
+                                         uint32_t si,
+                                         OpenXLSX::XLCellReference& masterOut,
+                                         std::string& masterFormulaOut,
+                                         std::string& rangeOut)
+    {
+        for (auto row = sheetData.child("row"); !row.empty(); row = row.next_sibling("row")) {
+            for (auto c = row.child("c"); !c.empty(); c = c.next_sibling("c")) {
+                auto f = c.child("f");
+                if (f.empty()) continue;
+                auto tAttr = f.attribute("t");
+                if (tAttr.empty() || std::string(tAttr.value()) != "shared") continue;
+                auto siAttr = f.attribute("si");
+                if (siAttr.empty() || siAttr.as_uint() != si) continue;
+                auto text = std::string(f.text().get());
+                if (!text.empty()) {
+                    masterFormulaOut = text;
+                    rangeOut = f.attribute("ref").as_string("");
+                    masterOut = OpenXLSX::XLCellReference{ c.attribute("r").value() };
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+}
+
 /**
  * @details Convenience function for setting the formula. This method is called from the templated
  * string assignment operator.
@@ -171,7 +311,8 @@ void XLFormulaProxy::setFormulaString(const char* formulaString, bool resetValue
 
 /**
  * @details Creates and returns an XLFormula object, based on the formula string in the underlying
- * XML document.
+ * XML document. If a shared formula is encountered, it will be expanded to the concrete
+ * formula for the current cell.
  */
 XLFormula XLFormulaProxy::getFormula() const
 {
@@ -183,14 +324,128 @@ XLFormula XLFormulaProxy::getFormula() const
     // ===== If the formula node doesn't exist, return an empty XLFormula object.
     if (formulaNode.empty()) return XLFormula();
 
-    // ===== If the formula type is 'shared' or 'array', throw an exception.
-    if (not formulaNode.attribute("t").empty() ) {    // 2024-05-28: de-duplicated check (only relevant for performance,
-                                                      //  xml_attribute::value() returns an empty string for empty attributes)
-        if (std::string(formulaNode.attribute("t").value()) == "shared")
-            throw XLFormulaError("Shared formulas not supported.");
-        if (std::string(formulaNode.attribute("t").value()) == "array")
-            throw XLFormulaError("Array formulas not supported.");
+    // ===== Handle specific types
+    std::string t = formulaNode.attribute("t").empty() ? std::string() : std::string(formulaNode.attribute("t").value());
+    if (t == "array")
+        throw XLFormulaError("Array formulas not supported.");
+
+    if (t == "shared") {
+        // If this is the master (has text), return it directly and mark metadata
+        XLFormula f;
+        f.setType(XLFormulaType::Shared);
+        f.setSharedIndex(formulaNode.attribute("si").as_uint());
+        auto text = std::string(formulaNode.text().get());
+        auto refAttr = std::string(formulaNode.attribute("ref").as_string(""));
+        if (!text.empty()) {
+            f = text.c_str();
+            if (!refAttr.empty()) f.setSharedRange(refAttr);
+            return f;
+        }
+
+        // Non-master: find master and expand
+        const auto sheetData = m_cellNode->parent().parent();
+        OpenXLSX::XLCellReference masterRef;
+        std::string masterText;
+        std::string range;
+        if (findMasterSharedFormulaForIndex(sheetData, f.sharedIndex(), masterRef, masterText, range)) {
+            auto expanded = expandSharedFormulaString(masterText, masterRef, m_cell->cellReference());
+            f = expanded.c_str();
+            if (!range.empty()) f.setSharedRange(range);
+            return f;
+        }
+
+        // fallback: return empty normal formula
+        return XLFormula();
+    }
+
+    // normal
+    return XLFormula(formulaNode.text().get());
+}
+
+/**
+ * @brief Get the raw formula without expanding shared references.
+ *        If the cell is a shared formula non-master, only metadata is returned.
+ */
+XLFormula XLFormulaProxy::getRawFormula() const
+{
+    assert(m_cellNode != nullptr);
+    assert(not m_cellNode->empty());
+    const auto formulaNode = m_cellNode->child("f");
+    if (formulaNode.empty()) return XLFormula();
+
+    std::string t = formulaNode.attribute("t").empty() ? std::string() : std::string(formulaNode.attribute("t").value());
+    if (t == "array")
+        throw XLFormulaError("Array formulas not supported.");
+
+    if (t == "shared") {
+        XLFormula f;
+        f.setType(XLFormulaType::Shared);
+        f.setSharedIndex(formulaNode.attribute("si").as_uint());
+        auto text = std::string(formulaNode.text().get());
+        auto refAttr = std::string(formulaNode.attribute("ref").as_string(""));
+        if (!text.empty()) f = text.c_str();
+        if (!refAttr.empty()) f.setSharedRange(refAttr);
+        return f;
     }
 
     return XLFormula(formulaNode.text().get());
+}
+
+/**
+ * @brief Write the master shared formula into the current cell.
+ */
+bool XLFormulaProxy::setSharedMaster(uint32_t sharedIndex,
+                                     const std::string& rangeRef,
+                                     const std::string& masterFormula,
+                                     bool resetValue)
+{
+    assert(m_cellNode != nullptr);
+    assert(not m_cellNode->empty());
+
+    // Ensure a <v> node exists
+    if (m_cellNode->child("v").empty()) m_cellNode->append_child("v");
+
+    // Recreate <f> node to ensure it contains text
+    if (!m_cellNode->child("f").empty()) m_cellNode->remove_child("f");
+    auto f = m_cellNode->append_child("f");
+    // Write attributes in readable order: t, ref, si
+    f.append_attribute("t").set_value("shared");
+    if (!rangeRef.empty()) f.append_attribute("ref").set_value(rangeRef.c_str());
+    f.append_attribute("si").set_value(sharedIndex);
+    f.text().set(masterFormula.c_str());
+
+    if (resetValue) m_cellNode->child("v").text().set(0);
+
+    // Keep <f> before <v> (consistent with setFormulaString behavior)
+    m_cellNode->prepend_move(f);
+
+    // Clean cell type and possible inlineStr
+    m_cellNode->remove_attribute("t");
+    m_cellNode->remove_child("is");
+    return true;
+}
+
+/**
+ * @brief Write a shared formula reference (non-master) to the current cell.
+ */
+bool XLFormulaProxy::setSharedRef(uint32_t sharedIndex, bool resetValue)
+{
+    assert(m_cellNode != nullptr);
+    assert(not m_cellNode->empty());
+
+    // Ensure <v> exists and rebuild <f> node
+    if (m_cellNode->child("v").empty()) m_cellNode->append_child("v");
+    if (!m_cellNode->child("f").empty()) m_cellNode->remove_child("f");
+    XMLNode fnode = m_cellNode->append_child("f");
+    // Write attributes in readable order: t, si
+    fnode.append_attribute("t").set_value("shared");
+    fnode.append_attribute("si").set_value(sharedIndex);
+    fnode.text().set("");
+
+    if (resetValue) m_cellNode->child("v").text().set(0);
+
+    m_cellNode->prepend_move(fnode);
+    m_cellNode->remove_attribute("t");
+    m_cellNode->remove_child("is");
+    return true;
 }

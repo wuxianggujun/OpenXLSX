@@ -52,6 +52,7 @@ YM      M9  MM    MM MM       MM    MM   d'  `MM.    MM            MM   d'  `MM.
 
 // ===== OpenXLSX Includes ===== //
 #include "XLCellRange.hpp"
+#include "XLException.hpp"
 #include "XLDocument.hpp"
 #include "XLMergeCells.hpp"
 #include "XLSheet.hpp"
@@ -110,6 +111,88 @@ namespace OpenXLSX
             .first_child_of_type(pugi::node_element)
             .attribute("tabSelected")
             .as_bool();    // BUGFIX 2024-05-01: .value() "0" was evaluating to true
+    }
+
+    // =============================
+    // Shared Formula Write Support
+    // =============================
+
+    /**
+     * @brief Get next available shared formula index by scanning <sheetData> for <f t="shared" si="..">.
+     */
+    uint32_t XLWorksheet::nextSharedFormulaIndex() const
+    {
+        if (m_nextSharedIndex != 0) return m_nextSharedIndex; // already initialized
+
+        uint32_t next = 0;
+        XMLNode sheetData = xmlDocument().document_element().child("sheetData");
+        if (!sheetData.empty()) {
+            for (XMLNode row = sheetData.child("row"); !row.empty(); row = row.next_sibling("row")) {
+                for (XMLNode c = row.child("c"); !c.empty(); c = c.next_sibling("c")) {
+                    XMLNode f = c.child("f");
+                    if (f.empty()) continue;
+                    auto tAttr = f.attribute("t");
+                    if (!tAttr.empty() && std::string(tAttr.value()) == "shared") {
+                        uint32_t si = f.attribute("si").as_uint();
+                        if (si >= next) next = si + 1;
+                    }
+                }
+            }
+        }
+        m_nextSharedIndex = next;
+        return m_nextSharedIndex;
+    }
+
+    /**
+     * @brief Set a shared formula using a string range reference.
+     */
+    uint32_t XLWorksheet::setSharedFormula(const std::string& rangeReference,
+                                           const std::string& masterFormula,
+                                           bool resetValues)
+    {
+        return setSharedFormula(range(rangeReference), masterFormula, resetValues);
+    }
+
+    /**
+     * @brief Set a shared formula using an XLCellRange.
+     */
+    uint32_t XLWorksheet::setSharedFormula(const XLCellRange& rng,
+                                           const std::string& masterFormula,
+                                           bool resetValues)
+    {
+        const auto topLeft = rng.topLeft();
+        const auto bottomRight = rng.bottomRight();
+        const std::string rangeRef = rng.address();
+
+        // Validate: at least 2 cells in range
+        uint32_t numRows = bottomRight.row() - topLeft.row() + 1;
+        uint16_t numCols = static_cast<uint16_t>(bottomRight.column() - topLeft.column() + 1);
+        if (numRows == 0 || numCols == 0 || (static_cast<uint64_t>(numRows) * numCols < 2))
+            throw XLException("Shared formula requires at least 2 cells.");
+
+        // Validate: master formula must not be empty
+        if (masterFormula.empty())
+            throw XLException("Master formula cannot be empty.");
+
+        // Allocate shared formula index
+        uint32_t si = nextSharedFormulaIndex();
+
+        // Write master cell
+        auto masterCell = cell(topLeft);
+        masterCell.formula().setSharedMaster(si, rangeRef, masterFormula, resetValues);
+
+        // Write the remaining cells as shared references
+        for (uint32_t r = topLeft.row(); r <= bottomRight.row(); ++r) {
+            for (uint16_t c = topLeft.column(); c <= bottomRight.column(); ++c) {
+                if (r == topLeft.row() && c == topLeft.column()) continue;
+                auto refCell = cell(r, c);
+                refCell.formula().setSharedRef(si, resetValues);
+            }
+        }
+
+        // Increase shared index for next usage
+        m_nextSharedIndex = si + 1;
+        return si;
     }
 
 

@@ -56,6 +56,7 @@ YM      M9  MM    MM MM       MM    MM   d'  `MM.    MM            MM   d'  `MM.
 #include <iostream>
 #include <string>
 #include <variant>
+#include <cstdint>
 
 // ===== OpenXLSX Includes ===== //
 #include "OpenXLSX-Exports.hpp"
@@ -66,6 +67,14 @@ namespace OpenXLSX
 {
     constexpr bool XLResetValue    = true;
     constexpr bool XLPreserveValue = false;
+
+    // Formula type (enhanced reading metadata)
+    enum class XLFormulaType {
+        Normal,
+        Shared,
+        Array,      // not yet supported
+        DataTable   // not yet supported
+    };
 
     //---------- Forward Declarations ----------//
     class XLFormulaProxy;
@@ -181,6 +190,15 @@ namespace OpenXLSX
          */
         std::string get() const;
 
+        // ==== Shared formula metadata (enhanced API) ====
+        XLFormulaType type() const { return m_type; }
+        void          setType(XLFormulaType type) { m_type = type; }
+        uint32_t      sharedIndex() const { return m_sharedIndex; }
+        void          setSharedIndex(uint32_t index) { m_sharedIndex = index; }
+        std::string   sharedRange() const { return m_sharedRange; }
+        void          setSharedRange(const std::string& range) { m_sharedRange = range; }
+        bool          isShared() const { return m_type == XLFormulaType::Shared; }
+
         /**
          * @brief Conversion operator, for converting object to a std::string.
          * @return The formula as a std::string.
@@ -194,7 +212,10 @@ namespace OpenXLSX
         XLFormula& clear();
 
     private:
-        std::string m_formulaString; /**< A std::string, holding the formula string.*/
+        std::string  m_formulaString;                 /**< formula string */
+        XLFormulaType m_type { XLFormulaType::Normal };/**< formula type */
+        uint32_t      m_sharedIndex { 0 };             /**< shared formula index (si) */
+        std::string   m_sharedRange;                   /**< shared formula range (master only) */
     };
 
     /**
@@ -270,6 +291,32 @@ namespace OpenXLSX
          */
         XLFormulaProxy& clear();
 
+        // Get the raw formula object (no shared expansion); keeps type/index metadata
+        XLFormula getRawFormula() const;
+
+        /**
+         * @brief Set the master shared formula (advanced usage).
+         *        Creates <f t="shared" si=".." ref="..">masterFormula</f> in the current cell.
+         * @param sharedIndex Shared index (unique per worksheet)
+         * @param rangeRef    Shared range (e.g. "A1:A10")
+         * @param masterFormula Master formula text (relative to current cell)
+         * @param resetValue If true, set <v> node to 0
+         * @return true on success
+         */
+        bool setSharedMaster(uint32_t sharedIndex,
+                             const std::string& rangeRef,
+                             const std::string& masterFormula,
+                             bool resetValue = XLResetValue);
+
+        /**
+         * @brief Set the shared formula reference (advanced usage).
+         *        Creates <f t="shared" si=".."/> in the current cell.
+         * @param sharedIndex Shared index
+         * @param resetValue If true, set <v> node to 0
+         * @return true on success
+         */
+        bool setSharedRef(uint32_t sharedIndex, bool resetValue = XLResetValue);
+
         /**
          * @brief Conversion operator, for converting the object to a std::string.
          * @return The formula as a std::string.
@@ -318,8 +365,7 @@ namespace OpenXLSX
 
         /**
          * @brief Get the underlying XLFormula object.
-         * @return A XLFormula object.
-         * @throw XLFormulaError if the formula is of 'shared' or 'array' types.
+         *        Shared formulas are expanded to the actual formula for this cell.
          */
         XLFormula getFormula() const;
 

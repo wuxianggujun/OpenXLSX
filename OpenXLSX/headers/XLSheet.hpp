@@ -987,6 +987,29 @@ namespace OpenXLSX
         XLCellRange range(std::string const& rangeReference) const;
 
         /**
+         * @brief Set a shared formula for a string range (top-left is the master cell).
+         * @param rangeReference Range string like "A2:A100"
+         * @param masterFormula  Master formula (relative to the range top-left)
+         * @param resetValues    Whether to reset <v> values to 0 (default true)
+         * @return Created shared index (si)
+         */
+        uint32_t setSharedFormula(const std::string& rangeReference,
+                                  const std::string& masterFormula,
+                                  bool resetValues = true);
+
+        /**
+         * @brief Set a shared formula for a cell range (top-left is the master cell).
+         */
+        uint32_t setSharedFormula(const XLCellRange& range,
+                                  const std::string& masterFormula,
+                                  bool resetValues = true);
+
+        /**
+         * @brief Get next available shared formula index (scan sheetData for max(si)+1).
+         */
+        uint32_t nextSharedFormulaIndex() const;
+
+        /**
          * @brief
          * @return
          */
@@ -1316,6 +1339,7 @@ namespace OpenXLSX
         XLComments      m_comments{};         /**< class handling the worksheet comments */
         XLTables        m_tables{};           /**< class handling the worksheet table settings */
         const std::vector< std::string_view >& m_nodeOrder = XLWorksheetNodeOrder;  // worksheet XML root node required child sequence
+        mutable uint32_t m_nextSharedIndex { 0 }; /**< Next available shared index (lazy-initialized) */
     };
 
     /**

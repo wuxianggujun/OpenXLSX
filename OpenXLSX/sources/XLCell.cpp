@@ -210,6 +210,17 @@ bool XLCell::hasFormula() const
 XLFormulaProxy& XLCell::formula() { return m_formulaProxy; }
 
 /**
+ * @brief Read calculated value of the cell.
+ * @details For formula cells, returns the value stored in <v> (cached result);
+ *          for normal cells, returns the cell value (same as value()).
+ *          Note: OpenXLSX does not perform formula evaluation; it only reads precomputed results.
+ */
+XLCellValue XLCell::calculatedValue() const
+{
+    return static_cast<XLCellValue>(value());
+}
+
+/**
 * @details get the value of the s attribute of the cell node
 */
 size_t XLCell::cellFormat() const { return m_cellNode->attribute("s").as_uint(0); }
