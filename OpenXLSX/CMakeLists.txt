@@ -196,6 +196,12 @@ if (OPENXLSX_ENABLE_NOWIDE)
 endif ()
 
 
+# Ensure MSVC treats sources as UTF-8 to avoid codepage parsing issues (C4819)
+if (MSVC)
+    target_compile_options(OpenXLSX PRIVATE /utf-8)
+endif()
+
+
 # Generate export header
 include(GenerateExportHeader)
 generate_export_header(OpenXLSX
