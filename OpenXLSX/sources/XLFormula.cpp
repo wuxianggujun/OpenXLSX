@@ -13,6 +13,7 @@
 // ===== OpenXLSX Includes ===== //
 #include "XLCell.hpp"
 #include "XLCellReference.hpp"
+#include "XLConstants.hpp"
 #include "XLFormula.hpp"
 #include "XLException.hpp"
 #include "XLXmlParser.hpp"              // pugixml wrapper
@@ -56,7 +57,51 @@ namespace
         return false;
     }
 
-    uint16_t columnLettersToNumber(const std::string& columnLetters)
+    std::vector<std::pair<size_t, size_t>> findBracketedRanges(const std::string& formula)
+    {
+        std::vector<std::pair<size_t, size_t>> ranges;
+        size_t start = std::string::npos;
+        uint32_t depth = 0;
+
+        for (size_t i = 0; i < formula.size(); ++i) {
+            if (formula[i] == '[') {
+                if (depth == 0) start = i;
+                ++depth;
+                continue;
+            }
+
+            if (formula[i] != ']' || depth == 0) continue;
+
+            --depth;
+            if (depth == 0) ranges.emplace_back(start, i + 1);
+        }
+
+        return ranges;
+    }
+
+    bool isFormulaIdentifierChar(char ch)
+    {
+        const auto uch = static_cast<unsigned char>(ch);
+        return std::isalnum(uch) || ch == '_' || ch == '.';
+    }
+
+    bool hasFormulaReferenceBoundary(const std::string& formula, size_t position, size_t length, bool hasSheetPart)
+    {
+        if (position > 0 && isFormulaIdentifierChar(formula[position - 1])) return false;
+
+        const size_t endPosition = position + length;
+        if (endPosition >= formula.size()) return true;
+
+        const char next = formula[endPosition];
+        if (isFormulaIdentifierChar(next) || next == '[') return false;
+
+        // Function names such as LOG10 can otherwise be mistaken for A1-style references.
+        if (!hasSheetPart && next == '(') return false;
+
+        return true;
+    }
+
+    uint32_t columnLettersToNumber(const std::string& columnLetters)
     {
         uint32_t columnNumber = 0;
         for (char ch : columnLetters) {
@@ -64,7 +109,7 @@ namespace
             if (upper < 'A' || upper > 'Z') break;
             columnNumber = columnNumber * 26 + static_cast<uint32_t>(upper - 'A' + 1);
         }
-        return static_cast<uint16_t>(columnNumber);
+        return columnNumber;
     }
 
     std::string numberToColumnLetters(uint16_t columnNumber)
@@ -84,8 +129,9 @@ namespace
 
         const int rowOffset = static_cast<int>(targetCell.row()) - static_cast<int>(masterCell.row());
         const int columnOffset = static_cast<int>(targetCell.column()) - static_cast<int>(masterCell.column());
-        const std::regex referenceRegex(R"(((?:'[^']+'|[A-Za-z_][\w\.]*)!)?(\$?)([A-Za-z]{1,3})(\$?)([0-9]{1,7}))");
+        const std::regex referenceRegex(R"(((?:'(?:[^']|'')+'|[A-Za-z_][\w\.]*)!)?(\$?)([A-Za-z]{1,3})(\$?)([0-9]{1,7}))");
         const auto quotedRanges = findQuotedRanges(masterFormula);
+        const auto bracketedRanges = findBracketedRanges(masterFormula);
 
         std::string result;
         result.reserve(masterFormula.size());
@@ -95,23 +141,29 @@ namespace
             const size_t position = static_cast<size_t>(it->position());
             const size_t length = static_cast<size_t>(it->length());
             if (isInRanges(quotedRanges, position)) continue;
-
-            if (position > last) result.append(masterFormula, last, position - last);
+            if (isInRanges(bracketedRanges, position)) continue;
 
             const std::smatch match = *it;
             const std::string sheetPart = match[1].str();
+            if (!hasFormulaReferenceBoundary(masterFormula, position, length, !sheetPart.empty())) continue;
+
             const bool columnAbsolute = !match[2].str().empty();
             const bool rowAbsolute = !match[4].str().empty();
-            const uint16_t column = columnLettersToNumber(match[3].str());
+            const uint32_t column = columnLettersToNumber(match[3].str());
             const uint32_t row = static_cast<uint32_t>(std::stoul(match[5].str()));
+
+            if (column < 1 || column > MAX_COLS || row < 1 || row > MAX_ROWS) continue;
 
             const int adjustedColumn = columnAbsolute ? static_cast<int>(column) : static_cast<int>(column) + columnOffset;
             const int adjustedRow = rowAbsolute ? static_cast<int>(row) : static_cast<int>(row) + rowOffset;
+            if (adjustedColumn < 1 || adjustedColumn > MAX_COLS || adjustedRow < 1 || adjustedRow > MAX_ROWS) continue;
 
-            std::string columnText = numberToColumnLetters(static_cast<uint16_t>(std::max(1, adjustedColumn)));
+            if (position > last) result.append(masterFormula, last, position - last);
+
+            std::string columnText = numberToColumnLetters(static_cast<uint16_t>(adjustedColumn));
             if (columnAbsolute) columnText = "$" + columnText;
 
-            std::string rowText = std::to_string(std::max(1, adjustedRow));
+            std::string rowText = std::to_string(adjustedRow);
             if (rowAbsolute) rowText = "$" + rowText;
 
             result += sheetPart + columnText + rowText;

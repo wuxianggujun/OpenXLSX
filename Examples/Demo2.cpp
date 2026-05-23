@@ -19,9 +19,8 @@ int main()
     // by XLFormula objects. They can be accessed through the XLCell interface using the .formula()
     // member function. It should be noted, however, that the functionality of XLFormula is somewhat
     // limited. Excel often uses 'shared' formulas, where the same formula is applied to several
-    // cells. XLFormula cannot handle shared formulas. Also, it cannot handle array formulas. This,
-    // in effect, means that XLFormula is not very useful for reading formulas from existing spread-
-    // sheets, but should rather be used to add or overwrite formulas to spreadsheets.
+    // cells. XLFormula expands shared formulas when reading, but it does not support array formulas.
+    // Also note that OpenXLSX does not calculate formula results.
 
     wks.cell("A1").value() = "Number:";
     wks.cell("B1").value() = 1;

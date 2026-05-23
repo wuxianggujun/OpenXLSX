@@ -476,6 +476,8 @@ TEST_CASE("XLRowDataRange Tests", "[XLRowDataRange]")
         doc.create("./testXLRow.xlsx");
         auto wks = doc.workbook().worksheet("Sheet1");
 
+        wks.cell("A1").value() = 1;
+
         auto row = wks.row(1);
         auto range = row.cells();
         for (auto& cell : range) cell.value() = 1;

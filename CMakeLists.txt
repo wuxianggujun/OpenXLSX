@@ -53,7 +53,7 @@ endif()
 #
 option(OPENXLSX_CREATE_DOCS           "Build library documentation (requires Doxygen and Graphviz/Dot to be installed)" ON)
 option(OPENXLSX_BUILD_SAMPLES         "Build sample programs" ON)
-option(OPENXLSX_BUILD_TESTS           "Build and run library tests - currently not functional" OFF)
+option(OPENXLSX_BUILD_TESTS           "Build library tests" OFF)
 option(OPENXLSX_BUILD_BENCHMARKS      "Build and run library benchmarks - currently not functional" OFF)
 option(OPENXLSX_ENABLE_LIBZIP         "Enable using libzip" OFF) # when OFF, default zip library is miniz
 option(OPENXLSX_ENABLE_LIBZIP_EXAMPLE "Build Demo1A example using libzip - requires libbz2-dev and liblzma-dev" OFF)
@@ -350,6 +350,7 @@ if(${OPENXLSX_BUILD_SAMPLES})
 endif()
 
 if(${OPENXLSX_BUILD_TESTS})
+    enable_testing()
     add_subdirectory(Tests)
 endif()
 
