@@ -407,6 +407,45 @@ namespace     // anonymous namespace for module local functions
         }
     }
 
+    int stylesSchemaOrder(XLStylesEntryType entryType)
+    {
+        switch (entryType) {
+            case XLStylesNumberFormats:    return 0;
+            case XLStylesFonts:            return 1;
+            case XLStylesFills:            return 2;
+            case XLStylesBorders:          return 3;
+            case XLStylesCellStyleFormats: return 4;
+            case XLStylesCellFormats:      return 5;
+            case XLStylesCellStyles:       return 6;
+            case XLStylesDiffCellFormats:  return 7;
+            case XLStylesTableStyles:      return 8;
+            case XLStylesColors:           return 9;
+            case XLStylesExtLst:           return 10;
+            case XLStylesInvalid:          [[fallthrough]];
+            default:                       return 100;
+        }
+    }
+
+    XMLNode createStyleNodeInSchemaOrder(XMLNode styleSheetNode, XLStylesEntryType entryType, std::string const& prefix)
+    {
+        const int newNodeOrder = stylesSchemaOrder(entryType);
+        XMLNode insertBefore;
+
+        for (XMLNode child = styleSheetNode.first_child_of_type(pugi::node_element); not child.empty();
+             child = child.next_sibling_of_type(pugi::node_element)) {
+            if (stylesSchemaOrder(XLStylesEntryTypeFromString(child.name())) > newNodeOrder) {
+                insertBefore = child;
+                break;
+            }
+        }
+
+        XMLNode node = insertBefore.empty()
+                           ? styleSheetNode.append_child(XLStylesEntryTypeToString(entryType).c_str())
+                           : styleSheetNode.insert_child_before(XLStylesEntryTypeToString(entryType).c_str(), insertBefore);
+        wrapNode(styleSheetNode, node, prefix);
+        return node;
+    }
+
    /**
      * @brief Format val as a string with decimalPlaces
      * @param val The value to format
@@ -2828,20 +2867,17 @@ XLStyles::XLStyles(XLXmlData* xmlData, bool suppressWarnings, std::string styles
         node = node.next_sibling_of_type(pugi::node_element);
     }
 
-    // ===== Fallbacks: create root style nodes (in reverse order, using prepend_child)
+    // ===== Fallbacks: create missing root style nodes in the schema-defined order.
     if (!m_diffCellFormats) {
-        node = doc.document_element().prepend_child(XLStylesEntryTypeToString(XLStylesDiffCellFormats).c_str());
-        wrapNode (doc.document_element(), node, stylesPrefix);
+        node = createStyleNodeInSchemaOrder(doc.document_element(), XLStylesDiffCellFormats, stylesPrefix);
         m_diffCellFormats = std::make_unique<XLDiffCellFormats>(node);
     }
     if (!m_cellStyles) {
-        node = doc.document_element().prepend_child(XLStylesEntryTypeToString(XLStylesCellStyles).c_str());
-        wrapNode (doc.document_element(), node, stylesPrefix);
+        node = createStyleNodeInSchemaOrder(doc.document_element(), XLStylesCellStyles, stylesPrefix);
         m_cellStyles = std::make_unique<XLCellStyles>(node);
     }
     if (!m_cellFormats) {
-        node = doc.document_element().prepend_child(XLStylesEntryTypeToString(XLStylesCellFormats).c_str());
-        wrapNode (doc.document_element(), node, stylesPrefix);
+        node = createStyleNodeInSchemaOrder(doc.document_element(), XLStylesCellFormats, stylesPrefix);
         m_cellFormats = std::make_unique<XLCellFormats>(node, XLPermitXfID);
     }
     if (m_cellFormats->count() == 0) {    // if the cell formats array is empty
@@ -2855,28 +2891,23 @@ XLStyles::XLStyles(XLXmlData* xmlData, bool suppressWarnings, std::string styles
     }
 
     if (!m_cellStyleFormats) {
-        node = doc.document_element().prepend_child(XLStylesEntryTypeToString(XLStylesCellStyleFormats).c_str());
-        wrapNode (doc.document_element(), node, stylesPrefix);
+        node = createStyleNodeInSchemaOrder(doc.document_element(), XLStylesCellStyleFormats, stylesPrefix);
         m_cellStyleFormats = std::make_unique<XLCellFormats>(node);
     }
     if (!m_borders) {
-        node = doc.document_element().prepend_child(XLStylesEntryTypeToString(XLStylesBorders).c_str());
-        wrapNode (doc.document_element(), node, stylesPrefix);
+        node = createStyleNodeInSchemaOrder(doc.document_element(), XLStylesBorders, stylesPrefix);
         m_borders = std::make_unique<XLBorders>(node);
     }
     if (!m_fills) {
-        node = doc.document_element().prepend_child(XLStylesEntryTypeToString(XLStylesFills).c_str());
-        wrapNode (doc.document_element(), node, stylesPrefix);
+        node = createStyleNodeInSchemaOrder(doc.document_element(), XLStylesFills, stylesPrefix);
         m_fills = std::make_unique<XLFills>(node);
     }
     if (!m_fonts) {
-        node = doc.document_element().prepend_child(XLStylesEntryTypeToString(XLStylesFonts).c_str());
-        wrapNode (doc.document_element(), node, stylesPrefix);
+        node = createStyleNodeInSchemaOrder(doc.document_element(), XLStylesFonts, stylesPrefix);
         m_fonts = std::make_unique<XLFonts>(node);
     }
     if (!m_numberFormats) {
-        node = doc.document_element().prepend_child(XLStylesEntryTypeToString(XLStylesNumberFormats).c_str());
-        wrapNode (doc.document_element(), node, stylesPrefix);
+        node = createStyleNodeInSchemaOrder(doc.document_element(), XLStylesNumberFormats, stylesPrefix);
         m_numberFormats = std::make_unique<XLNumberFormats>(node);
     }
 }
