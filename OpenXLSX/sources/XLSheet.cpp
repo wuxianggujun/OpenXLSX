@@ -1066,7 +1066,7 @@ XLWorksheet::XLWorksheet(XLXmlData* xmlData) : XLSheetBase(xmlData)
             catch (...) {
                 throw XLInternalError("Worksheet column min and/or max attributes are invalid.");
             }
-            if (min != max) {
+            if (min != max && (max - min) < 1024) {
                 currentNode.attribute("min").set_value(max);
                 for (uint16_t i = min; i < max; i++) {    // NOLINT
                     auto newnode = xmlDocument().document_element().child("cols").insert_child_before("col", currentNode);
