@@ -127,3 +127,4 @@
 !/Tests/catch/*.hpp
 !/Tests/CMakeLists.txt
 !/Tests/*.cpp
+.ace-tool/
